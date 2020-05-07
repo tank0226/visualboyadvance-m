@@ -846,7 +846,7 @@ int MainFrame::FilterEvent(wxEvent& event)
     if (event.GetEventType() == wxEVT_KEY_DOWN && !menus_opened && !dialog_opened)
     {
         wxKeyEvent& ke = (wxKeyEvent&)event;
-        int keyCode = ke.GetKeyCode();
+        int keyCode = getKeyboardKeyCode(ke);
         int keyMod = ke.GetModifiers();
         wxAcceleratorEntry_v accels = wxGetApp().GetAccels();
         for (size_t i = 0; i < accels.size(); ++i)

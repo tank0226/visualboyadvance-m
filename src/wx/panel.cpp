@@ -16,6 +16,7 @@
 #include "drawing.h"
 #include "filters.h"
 #include "wxvbam.h"
+#include "wxutil.h"
 
 #ifdef __WXMSW__
 #include <windows.h>
@@ -1314,27 +1315,21 @@ static void draw_black_background(wxWindow* win) {
 void GameArea::OnKeyDown(wxKeyEvent& ev)
 {
     // check if the key is pressed indeed and then process it
-    wxKeyCode keyCode = (wxKeyCode)ev.GetKeyCode();
-    if (wxGetKeyState(keyCode) && process_key_press(true, ev.GetKeyCode(), ev.GetModifiers())) {
-        ev.Skip(false);
-        ev.StopPropagation();
+    int kc = getKeyboardKeyCode(ev);
+    wxKeyCode keyCode = (wxKeyCode)kc;
+    if (wxGetKeyState(keyCode) && process_key_press(true, kc, ev.GetModifiers())) {
         wxWakeUpIdle();
     }
-    else {
-        ev.Skip();
-    }
+    ev.Skip();
 }
 
 void GameArea::OnKeyUp(wxKeyEvent& ev)
 {
-    if (process_key_press(false, ev.GetKeyCode(), ev.GetModifiers())) {
-        ev.Skip(false);
-        ev.StopPropagation();
+    int kc = getKeyboardKeyCode(ev);
+    if (process_key_press(false, kc, ev.GetModifiers())) {
         wxWakeUpIdle();
     }
-    else {
-        ev.Skip();
-    }
+    ev.Skip();
 }
 
 // these three are forwarded to the DrawingPanel instance

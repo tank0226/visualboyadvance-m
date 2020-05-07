@@ -1,3 +1,4 @@
+#include <wx/tokenzr.h>
 #include <wx/log.h>
 #include "wx/keyedit.h"
 
@@ -11,7 +12,7 @@ END_EVENT_TABLE()
 void wxKeyTextCtrl::OnKeyDown(wxKeyEvent& event)
 {
     lastmod = event.GetModifiers();
-    lastkey = event.GetKeyCode();
+    lastkey = getKeyboardKeyCode(event);
 }
 
 void wxKeyTextCtrl::OnKeyUp(wxKeyEvent& event)
@@ -77,7 +78,7 @@ wxString wxKeyTextCtrl::ToString(int mod, int key)
     wxAcceleratorEntry ae(mod, char_override || mod_override ? WXK_F1 : key);
     // Note: wx translates unconditionally (2.8.12, 2.9.1)!
     // So any strings added below must also be translated unconditionally
-    wxString s = ae.ToString();
+    wxString s = ae.ToRawString();
 
     if (char_override || mod_override) {
         size_t l = s.rfind(wxT('-'));
@@ -151,6 +152,16 @@ wxString wxKeyTextCtrl::ToString(int mod, int key)
         s.Replace(display_name,    name,    true);
     }
 
+    // Check for unicode char. It is not possible to use it for
+    // wxAcceleratorEntry `FromString`
+    wxLogNull disable_logging;
+    wxAcceleratorEntry aeTest;
+    if (!aeTest.FromString(s)) {
+        wxString unicodeChar;
+        unicodeChar.Printf("%d:%d", key, mod);
+        return unicodeChar;
+    }
+
     return s;
 }
 
@@ -173,12 +184,31 @@ wxString wxKeyTextCtrl::ToString(wxAcceleratorEntry_v keys, wxChar sep)
     return ret;
 }
 
+static bool checkForPairKeyMod(const wxString& s, int& mod, int& key)
+{
+    long ulkey, ulmod;
+    // key:mod as pair
+    wxStringTokenizer tokenizer(s, ":");
+    if (tokenizer.CountTokens() == 2 &&
+        tokenizer.GetNextToken().ToLong(&ulkey) &&
+        tokenizer.GetNextToken().ToLong(&ulmod))
+    {
+        key = (int)ulkey;
+        mod = (int)ulmod;
+        return true;
+    }
+    return false;
+}
+
 bool wxKeyTextCtrl::ParseString(const wxString& s, int len, int& mod, int& key)
 {
     mod = key = 0;
 
     if (!s || !len)
         return false;
+
+    if (checkForPairKeyMod(s, mod, key))
+        return true;
 
     wxString a = wxT('\t');
     a.Append(s.Left(len));
@@ -260,29 +290,23 @@ wxAcceleratorEntry_v wxKeyTextCtrl::FromString(const wxString& s, wxChar sep)
 {
     wxAcceleratorEntry_v ret, empty;
     int mod, key;
-    size_t len = s.size();
 
-    for (size_t lastkey = len - 1; (lastkey = s.rfind(sep, lastkey)) != wxString::npos; lastkey--) {
-        if (lastkey == len - 1) {
-            // sep as accel
-            if (!lastkey)
-                break;
-
-            if (s[lastkey - 1] == wxT('-') || s[lastkey - 1] == wxT('+') || s[lastkey - 1] == sep)
-                continue;
-        }
-
-        if (!ParseString(s.Mid(lastkey + 1), len - lastkey - 1, mod, key))
+    wxStringTokenizer tokenizer(s, sep);
+    int nonEmptyTokens = 0;
+    while (tokenizer.HasMoreTokens()) {
+        wxString token = tokenizer.GetNextToken();
+        if (token.IsEmpty()) continue;
+        nonEmptyTokens += 1;
+        if (!ParseString(token, token.size(), mod, key))
             return empty;
 
         ret.insert(ret.begin(), wxAcceleratorEntry(mod, key));
-        len = lastkey;
     }
-
-    if (!ParseString(s, len, mod, key))
-        return empty;
-
-    ret.insert(ret.begin(), wxAcceleratorEntry(mod, key));
+    // check if sep is accel
+    if (s.Freq(sep) > 0 && s.Freq(sep) >= nonEmptyTokens) {
+        ParseString(sep, 1, mod, key);
+        ret.insert(ret.begin(), wxAcceleratorEntry(mod, key));
+    }
     return ret;
 }
 

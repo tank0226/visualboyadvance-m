@@ -1,3 +1,4 @@
+#include <wx/tokenzr.h>
 #include "wx/joyedit.h"
 
 // FIXME: suppport analog/digital flag on per-axis basis
@@ -264,9 +265,7 @@ static bool ParseJoy(const wxString& s, int len, int& mod, int& key, int& joy)
         key = simple_atoi(p.Mid(b), l);
 #define check_dir(n, d) else if (hatre.GetMatch(&b, &l, n) && l > 0) mod = WXJB_HAT_##d
 
-        if (0)
-            ;
-
+        if (0);
         check_dir(3, N);
         check_dir(4, S);
         check_dir(5, E);
@@ -300,34 +299,26 @@ wxJoyKeyBinding_v wxJoyKeyTextCtrl::FromString(const wxString& s, wxChar sep)
 {
     wxJoyKeyBinding_v ret, empty;
     int mod, key, joy;
-    size_t len = s.size();
-
-    if (!len)
+    if (s.size() == 0)
         return empty;
 
-    for (size_t lastkey = len - 1; (lastkey = s.rfind(sep, lastkey)) != wxString::npos; lastkey--) {
-        if (lastkey == len - 1) {
-            // sep as accel
-            if (!lastkey)
-                break;
-
-            if (s[lastkey - 1] == wxT('-') || s[lastkey - 1] == wxT('+') || s[lastkey - 1] == sep)
-                continue;
-        }
-
-        if (!ParseString(s.Mid(lastkey + 1), len - lastkey - 1, mod, key, joy))
+    wxStringTokenizer tokenizer(s, sep);
+    int nonEmptyTokens = 0;
+    while (tokenizer.HasMoreTokens()) {
+        wxString token = tokenizer.GetNextToken();
+        if (token.IsEmpty()) continue;
+        nonEmptyTokens += 1;
+        if (!ParseString(token, token.size(), mod, key, joy))
             return empty;
-
         wxJoyKeyBinding jb = { key, mod, joy };
         ret.insert(ret.begin(), jb);
-        len = lastkey;
     }
 
-    if (!ParseString(s, len, mod, key, joy))
-        return empty;
-
-    wxJoyKeyBinding jb = { key, mod, joy };
-    ret.insert(ret.begin(), jb);
+    if (s.Freq(sep) > 0 && s.Freq(sep) >= nonEmptyTokens) {
+        ParseString(sep, 1, mod, key, joy);
+        wxJoyKeyBinding jb = { key, mod, joy };
+        ret.insert(ret.begin(), jb);
+    }
     return ret;
 }
 

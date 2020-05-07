@@ -33,6 +33,7 @@
 #include "../gba/Sound.h"
 
 #include "wxlogdebug.h"
+#include "wxutil.h"
 
 template <typename T>
 void CheckPointer(T pointer)
