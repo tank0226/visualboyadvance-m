@@ -65,7 +65,7 @@
 
 #include "wx/keyedit.h"
 
-static inline void DoSetAccel(wxMenuItem* mi, wxAcceleratorEntry* acc)
+static inline void DoSetAccel(wxMenuItem* mi, wxAcceleratorEntryUnicode* acc)
 {
     wxString lab = mi->GetItemLabel();
     size_t tab = lab.find(wxT('\t'));

@@ -10,7 +10,7 @@
 #include <wx/textctrl.h>
 #include "wxutil.h"
 
-typedef std::vector<wxAcceleratorEntry> wxAcceleratorEntry_v;
+typedef std::vector<wxAcceleratorEntryUnicode> wxAcceleratorEntry_v;
 
 class wxKeyTextCtrl : public wxTextCtrl {
 public:
@@ -52,9 +52,12 @@ public:
     }
 
     // convert mod+key to accel string, separated by -
-    static wxString ToString(int mod, int key);
+    static wxString ToString(int mod, int key, bool isConfig = false);
     // convert multiple keys, separated by multikey
-    static wxString ToString(wxAcceleratorEntry_v keys, wxChar sep = wxT(','));
+    static wxString ToString(wxAcceleratorEntry_v keys, wxChar sep = wxT(','), bool isConfig = false);
+    // convert mod+key to candiate accel string, separated by -
+    // this *should* work, but may fail for unicode chars
+    static wxString ToCandidateString(int mod, int key);
     // parses single key string into mod+key
     static bool FromString(const wxString& s, int& mod, int& key);
     // parse multi-key string into accelentry array

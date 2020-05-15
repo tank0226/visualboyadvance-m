@@ -13,6 +13,7 @@ void wxKeyTextCtrl::OnKeyDown(wxKeyEvent& event)
 {
     lastmod = event.GetModifiers();
     lastkey = getKeyboardKeyCode(event);
+    KeyboardInputMap::AddMap(ToCandidateString(lastmod, lastkey), lastkey, lastmod);
 }
 
 void wxKeyTextCtrl::OnKeyUp(wxKeyEvent& event)
@@ -48,10 +49,12 @@ void wxKeyTextCtrl::OnKeyUp(wxKeyEvent& event)
         } else
             Clear();
     } else {
-        wxString nv = ToString(mod, key);
+        wxString nv = ToCandidateString(mod, key);
 
         if (nv.empty())
             return;
+
+        KeyboardInputMap::AddMap(nv, key, mod);
 
         if (multikey) {
             wxString ov = GetValue();
@@ -67,7 +70,7 @@ void wxKeyTextCtrl::OnKeyUp(wxKeyEvent& event)
         Navigate();
 }
 
-wxString wxKeyTextCtrl::ToString(int mod, int key)
+wxString getString(int mod, int key)
 {
     // wx ignores non-alnum printable chars
     // actually, wx gives an assertion error, so it's best to filter out
@@ -75,7 +78,7 @@ wxString wxKeyTextCtrl::ToString(int mod, int key)
     bool char_override = key > 32 && key < WXK_START && !wxIsalnum(key);
     // wx also ignores modifiers (and does not report meta at all)
     bool mod_override = key == WXK_SHIFT || key == WXK_CONTROL || key == WXK_ALT || key == WXK_RAW_CONTROL;
-    wxAcceleratorEntry ae(mod, char_override || mod_override ? WXK_F1 : key);
+    wxAcceleratorEntryUnicode ae(mod, char_override || mod_override ? WXK_F1 : key);
     // Note: wx translates unconditionally (2.8.12, 2.9.1)!
     // So any strings added below must also be translated unconditionally
     wxString s = ae.ToRawString();
@@ -151,21 +154,114 @@ wxString wxKeyTextCtrl::ToString(int mod, int key)
         s.Replace(display_name_tr, name_tr, true);
         s.Replace(display_name,    name,    true);
     }
-
-    // Check for unicode char. It is not possible to use it for
-    // wxAcceleratorEntry `FromString`
-    wxLogNull disable_logging;
-    wxAcceleratorEntry aeTest;
-    if (!aeTest.FromString(s)) {
-        wxString unicodeChar;
-        unicodeChar.Printf("%d:%d", key, mod);
-        return unicodeChar;
-    }
-
     return s;
 }
 
-wxString wxKeyTextCtrl::ToString(wxAcceleratorEntry_v keys, wxChar sep)
+wxString wxKeyTextCtrl::ToString(int mod, int key, bool isConfig)
+{
+    wxString s = getString(mod, key);
+    // Check for unicode char. It is not possible to use it for
+    // wxAcceleratorEntry `FromString`
+    wxLogNull disable_logging;
+    wxAcceleratorEntryUnicode aeTest;
+    if (!aeTest.FromString(s)) {
+        if (!KeyboardInputMap::GetMap(s, key, mod) || isConfig) {
+            wxString unicodeChar;
+            unicodeChar.Printf("%d:%d", key, mod);
+            return unicodeChar;
+        }
+    }
+    return s;
+}
+
+wxString wxKeyTextCtrl::ToCandidateString(int mod, int key)
+{
+    // wx ignores non-alnum printable chars
+    // actually, wx gives an assertion error, so it's best to filter out
+    // before passing to ToString()
+    bool char_override = key > 32 && key < WXK_START && !wxIsalnum(key);
+    // wx also ignores modifiers (and does not report meta at all)
+    bool mod_override = key == WXK_SHIFT || key == WXK_CONTROL || key == WXK_ALT || key == WXK_RAW_CONTROL;
+    wxAcceleratorEntryUnicode ae(mod, char_override || mod_override ? WXK_F1 : key);
+    // Note: wx translates unconditionally (2.8.12, 2.9.1)!
+    // So any strings added below must also be translated unconditionally
+    wxString s = ae.ToRawString();
+
+    if (char_override || mod_override) {
+        size_t l = s.rfind(wxT('-'));
+
+        if (l == wxString::npos)
+            l = 0;
+        else
+            l++;
+
+        s.erase(l);
+
+        switch (key) {
+        case WXK_SHIFT:
+            s.append(_("SHIFT"));
+            break;
+
+        case WXK_ALT:
+            s.append(_("ALT"));
+            break;
+
+        case WXK_CONTROL:
+            s.append(_("CTRL"));
+            break;
+
+        // this is the control key on macs
+#ifdef __WXMAC__
+        case WXK_RAW_CONTROL:
+            s.append(_("RAWCTRL"));
+            break;
+#endif
+
+        default:
+            s.append((wxChar)key);
+        }
+    }
+
+// on Mac, ctrl/meta become xctrl/cmd
+// on other, meta is ignored
+#ifndef __WXMAC__
+
+    if (mod & wxMOD_META) {
+        s.insert(0, _("Meta-"));
+    }
+
+#endif
+
+    if (s.empty() || (key != wxT('-') && s[s.size() - 1] == wxT('-') && s != _("Num") + wxT(" -"))
+                  || (key != wxT('+') && s[s.size() - 1] == wxT('+') && s != _("Num") + wxT(" +")))
+    {
+        // bad key combo; probably also generates an assertion in wx
+        return wxEmptyString;
+    }
+
+// hacky workaround for bug in wx 3.1+ not parsing key display names, or
+// parsing modifiers that aren't a combo correctly
+    s.MakeUpper();
+
+    int keys_el_size = sizeof(keys_with_display_names)/sizeof(keys_with_display_names[0]);
+
+    for (int i = 0; i < keys_el_size; i++) {
+        wxString name_tr(_(keys_with_display_names[i].name));
+        wxString display_name_tr(_(keys_with_display_names[i].display_name));
+        name_tr.MakeUpper();
+        display_name_tr.MakeUpper();
+        wxString name(_(keys_with_display_names[i].name));
+        wxString display_name(_(keys_with_display_names[i].display_name));
+        name.MakeUpper();
+        display_name.MakeUpper();
+
+        s.Replace(display_name_tr, name_tr, true);
+        s.Replace(display_name,    name,    true);
+    }
+    return s;
+}
+
+wxString wxKeyTextCtrl::ToString(wxAcceleratorEntry_v keys, wxChar sep, bool isConfig)
 {
     wxString ret;
 
@@ -173,7 +269,7 @@ wxString wxKeyTextCtrl::ToString(wxAcceleratorEntry_v keys, wxChar sep)
         if (i > 0)
             ret += sep;
 
-        wxString key = ToString(keys[i].GetFlags(), keys[i].GetKeyCode());
+        wxString key = ToString(keys[i].GetFlags(), keys[i].GetKeyCode(), isConfig);
 
         if (key.empty())
             return wxEmptyString;
@@ -195,6 +291,7 @@ static bool checkForPairKeyMod(const wxString& s, int& mod, int& key)
     {
         key = (int)ulkey;
         mod = (int)ulmod;
+        KeyboardInputMap::AddMap(wxKeyTextCtrl::ToCandidateString(mod, key), key, mod);
         return true;
     }
     return false;
@@ -210,9 +307,12 @@ bool wxKeyTextCtrl::ParseString(const wxString& s, int len, int& mod, int& key)
     if (checkForPairKeyMod(s, mod, key))
         return true;
 
+    if (KeyboardInputMap::GetMap(s, key, mod))
+        return true;
+
     wxString a = wxT('\t');
     a.Append(s.Left(len));
-    wxAcceleratorEntry ae;
+    wxAcceleratorEntryUnicode ae;
 #ifndef __WXMAC__
 #define check_meta(str)                                                        \
     do {                                                                       \
@@ -300,12 +400,12 @@ wxAcceleratorEntry_v wxKeyTextCtrl::FromString(const wxString& s, wxChar sep)
         if (!ParseString(token, token.size(), mod, key))
             return empty;
 
-        ret.insert(ret.begin(), wxAcceleratorEntry(mod, key));
+        ret.insert(ret.begin(), wxAcceleratorEntryUnicode(mod, key));
     }
     // check if sep is accel
     if (s.Freq(sep) > 0 && s.Freq(sep) >= nonEmptyTokens) {
         ParseString(sep, 1, mod, key);
-        ret.insert(ret.begin(), wxAcceleratorEntry(mod, key));
+        ret.insert(ret.begin(), wxAcceleratorEntryUnicode(mod, key));
     }
     return ret;
 }

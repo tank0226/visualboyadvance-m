@@ -2003,7 +2003,7 @@ static bool treeid_to_name(int id, wxString& name, wxTreeCtrl* tc,
 }
 
 // for sorting accels by command ID
-static bool cmdid_lt(const wxAcceleratorEntry& a, const wxAcceleratorEntry& b)
+static bool cmdid_lt(const wxAcceleratorEntryUnicode& a, const wxAcceleratorEntryUnicode& b)
 {
     return a.GetCommand() < b.GetCommand();
 }
@@ -2076,10 +2076,13 @@ public:
         asb->Enable(!key->GetValue().empty());
         int cmd = id->val;
 
-        for (size_t i = 0; i < accels.size(); i++)
-            if (accels[i].GetCommand() == cmdtab[cmd].cmd_id)
-                lb->Append(wxKeyTextCtrl::ToString(accels[i].GetFlags(),
-                    accels[i].GetKeyCode()));
+        for (size_t i = 0; i < accels.size(); ++i) {
+            if (accels[i].GetCommand() == cmdtab[cmd].cmd_id) {
+                wxString key = wxKeyTextCtrl::ToCandidateString(accels[i].GetFlags(), accels[i].GetKeyCode());
+                KeyboardInputMap::AddMap(key, accels[i].GetKeyCode(), accels[i].GetFlags());
+                lb->Append(key);
+            }
+        }
     }
 
     // after selecting a key in key list, enable Remove button
@@ -2102,7 +2105,8 @@ public:
         int selmod, selkey;
 
         if (!wxKeyTextCtrl::FromString(selstr, selmod, selkey))
-            return; // this should never happen
+            // this should never happen
+            return;
 
         remb->Enable(false);
 
@@ -2125,7 +2129,7 @@ public:
 
         for (size_t i = 0; i < sys_accels.size(); i++)
             if (sys_accels[i].GetFlags() == selmod && sys_accels[i].GetKeyCode() == selkey) {
-                wxAcceleratorEntry ne(selmod, selkey, XRCID("NOOP"));
+                wxAcceleratorEntryUnicode ne(selmod, selkey, XRCID("NOOP"));
                 user_accels.push_back(ne);
             }
 
@@ -2167,13 +2171,17 @@ public:
         int acmod, ackey;
 
         if (!wxKeyTextCtrl::FromString(accel, acmod, ackey))
-            return; // this should never happen
+            // this should never happen
+            return;
 
         for (unsigned int i = 0; i < lb->GetCount(); i++)
             if (lb->GetString(i) == accel)
                 return; // ignore attempts to add twice
 
-        lb->Append(accel);
+        ///lb->Append(accel);
+        wxString key = wxKeyTextCtrl::ToCandidateString(acmod, ackey);
+        KeyboardInputMap::AddMap(key, ackey, acmod);
+        lb->Append(key);
 
         // first drop from user accels, if applicable
         for (wxAcceleratorEntry_v::iterator i = user_accels.begin();
@@ -2185,7 +2193,7 @@ public:
 
         // then assign to this command
         const TreeInt* id = static_cast<const TreeInt*>(tc->GetItemData(csel));
-        wxAcceleratorEntry ne(acmod, ackey, cmdtab[id->val].cmd_id);
+        wxAcceleratorEntryUnicode ne(acmod, ackey, cmdtab[id->val].cmd_id);
         user_accels.push_back(ne);
         // now assigned to this cmd...
         wxString lab;
@@ -2215,6 +2223,10 @@ public:
             asb->Enable(false);
             return;
         }
+
+        wxString realChar = wxKeyTextCtrl::ToCandidateString(acmod, ackey);
+        KeyboardInputMap::AddMap(realChar, ackey, acmod);
+        key->ChangeValue(realChar);
 
         asb->Enable(tc->GetSelection().IsOk());
         int cmd = -1;
@@ -2358,7 +2370,7 @@ public:
 } throttle_ctrl;
 
 static class SpeedupThrottleCtrl_t : public wxEvtHandler {
-public:  
+public:
     wxSpinCtrl* speedup_throttle_spin;
     wxCheckBox* frame_skip_cb;
 
@@ -2418,7 +2430,7 @@ public:
 
         speedup_throttle_frame_skip = prev_frame_skip_cb = checked;
     }
-                            
+
     void Init(wxShowEvent& ev)
     {
         uint32_t val = 0;
@@ -2547,7 +2559,7 @@ wxAcceleratorEntry_v MainFrame::get_accels(wxAcceleratorEntry_v user_accels)
     // silently keep only last defined binding
     // same horribly inefficent O(n*m) search for duplicates as above..
     for (size_t i = 0; i < user_accels.size(); i++) {
-        const wxAcceleratorEntry& ae = user_accels[i];
+        const wxAcceleratorEntryUnicode& ae = user_accels[i];
 
         for (wxAcceleratorEntry_v::iterator e = accels.begin(); e < accels.end(); ++e)
             if (ae.GetFlags() == e->GetFlags() && ae.GetKeyCode() == e->GetKeyCode()) {
@@ -2612,7 +2624,7 @@ void MainFrame::set_global_accels()
             len++;
 
     if (len) {
-        wxAcceleratorEntry tab[1000];
+        wxAcceleratorEntryUnicode tab[1000];
 
         for (size_t i = 0, j = 0; i < accels.size(); i++)
             if (!accels[i].GetMenuItem())
@@ -2627,7 +2639,7 @@ void MainFrame::set_global_accels()
 
     // save recent accels
     for (int i = 0; i < 10; i++)
-        recent_accel[i] = wxAcceleratorEntry();
+        recent_accel[i] = wxAcceleratorEntryUnicode();
 
     for (size_t i = 0; i < accels.size(); i++)
         if (accels[i].GetCommand() >= wxID_FILE1 && accels[i].GetCommand() <= wxID_FILE10)
@@ -2922,7 +2934,7 @@ bool MainFrame::BindControls()
                         }
 
                     if (a)
-                        sys_accels.push_back(*a);
+                        sys_accels.push_back(wxAcceleratorEntryUnicode(a));
                     else
                         // strip from label so user isn't confused
                         DoSetAccel(mi, NULL);

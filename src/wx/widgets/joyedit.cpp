@@ -105,10 +105,10 @@ void wxJoyKeyTextCtrl::OnJoy(wxSDLJoyEvent& event)
         Navigate();
 }
 
-wxString wxJoyKeyTextCtrl::ToString(int mod, int key, int joy)
+wxString wxJoyKeyTextCtrl::ToString(int mod, int key, int joy, bool isConfig)
 {
     if (!joy)
-        return wxKeyTextCtrl::ToString(mod, key);
+        return wxKeyTextCtrl::ToString(mod, key, isConfig);
 
     wxString s;
     // Note: wx translates unconditionally (2.8.12, 2.9.1)!
@@ -166,7 +166,7 @@ wxString wxJoyKeyTextCtrl::ToString(int mod, int key, int joy)
     return s;
 }
 
-wxString wxJoyKeyTextCtrl::ToString(wxJoyKeyBinding_v keys, wxChar sep)
+wxString wxJoyKeyTextCtrl::ToString(wxJoyKeyBinding_v keys, wxChar sep, bool isConfig)
 {
     wxString ret;
 
@@ -174,7 +174,7 @@ wxString wxJoyKeyTextCtrl::ToString(wxJoyKeyBinding_v keys, wxChar sep)
         if (i > 0)
             ret += sep;
 
-        wxString key = ToString(keys[i].mod, keys[i].key, keys[i].joy);
+        wxString key = ToString(keys[i].mod, keys[i].key, keys[i].joy, isConfig);
 
         if (key.empty())
             return wxEmptyString;

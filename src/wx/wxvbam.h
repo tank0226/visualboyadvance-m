@@ -346,7 +346,7 @@ private:
     checkable_mi_array_t checkable_mi;
     // recent menu item accels
     wxMenu* recent;
-    wxAcceleratorEntry recent_accel[10];
+    wxAcceleratorEntryUnicode recent_accel[10];
     // joystick reader
     wxSDLJoy joy;
 

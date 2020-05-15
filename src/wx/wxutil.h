@@ -5,4 +5,50 @@
 
 int getKeyboardKeyCode(wxKeyEvent& event);
 
+#include <wx/accel.h>
+
+class wxAcceleratorEntryUnicode : public wxAcceleratorEntry
+{
+  public:
+    wxAcceleratorEntryUnicode(wxAcceleratorEntry *accel);
+    wxAcceleratorEntryUnicode(int flags=0, int keyCode=0, int cmd=0, wxMenuItem *item=nullptr);
+  private:
+    void init(int flags, int keyCode);
+    wxString ukey;
+};
+
+#include <map>
+#include <wx/string.h>
+#include "widgets/wx/keyedit.h"
+
+class KeyboardInputMap
+{
+  public:
+    static KeyboardInputMap* getInstance();
+    static void AddMap(wxString keyStr, int key, int mod);
+    static bool GetMap(wxString keyStr, int &key, int &mod);
+  private:
+    static KeyboardInputMap* instance;
+
+    KeyboardInputMap();
+
+    // We want to keep track of this pair for
+    // almost all keypresses.
+    typedef struct KeyMod {
+        int key;
+        int mod;
+    } KeyMod;
+
+    KeyMod newPair(int key, int mod)
+    {
+        KeyMod tmp;
+        tmp.key = key;
+        tmp.mod = mod;
+        return tmp;
+    }
+
+    // Map accel string to pair
+    std::map<wxString, KeyMod> keysMap;
+};
+
 #endif
