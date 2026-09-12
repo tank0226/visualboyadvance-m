@@ -1781,11 +1781,21 @@ EOF
                         done
                     fi
 
-                    # Run bash configure scripts with bash.
+                    # Run bash configure scripts with bash.  CONFIG_SHELL has
+                    # to name whichever one we picked: configure re-execs
+                    # itself with it when it decides it needs a better shell,
+                    # hands it to sub-configures, bakes it into config.status
+                    # and writes it into the generated Makefile as SHELL -- so
+                    # pointing a bash-only script at dash would break it, and
+                    # leaving it unset drops the dist back to /bin/sh for every
+                    # recipe line of the build.  That is the real win here:
+                    # /bin/sh on macOS is bash 3.2 and takes 5.2ms to start
+                    # against dash's 2.7ms, paid once per recipe.  Configure
+                    # itself barely moves, being dominated by compiler calls.
                     if grep -Eq '\[\[.*\]\]' "$configure"; then
-                        echo_run bash $configure "$@"
+                        echo_run env CONFIG_SHELL=bash bash $configure "$@"
                     else
-                        echo_run $DASH $configure "$@"
+                        echo_run env CONFIG_SHELL="$DASH" $DASH $configure "$@"
                     fi
                 fi
             fi
