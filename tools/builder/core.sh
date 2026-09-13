@@ -159,7 +159,7 @@ DISTS=$DISTS'
     lua             https://www.lua.org/ftp/lua-5.5.1.tar.gz                                                    lib/liblua.a
     wxwidgets       https://github.com/wxWidgets/wxWidgets/releases/download/v3.3.3/wxWidgets-3.3.3.tar.bz2     lib/libwx_baseu-3.*.a
     libx264         https://code.videolan.org/videolan/x264/-/archive/master/x264-master.tar.bz2                lib/libx264.a
-    libx265         https://bitbucket.org/multicoreware/x265_git/downloads/x265_4.2.tar.gz                      lib/libx265.a
+    libx265         https://github.com/Multicorewareinc/x265/releases/download/4.3/x265_4.3.tar.gz              lib/libx265.a
     ffmpeg          http://ffmpeg.org/releases/ffmpeg-9.0.1.tar.xz                                              lib/libavformat.a
     VulkanHeaders   https://github.com/KhronosGroup/Vulkan-Headers/archive/refs/tags/v1.4.357.tar.gz            include/vulkan/vulkan.h
     MoltenVK        https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.2/MoltenVK-macos.tar        lib/libMoltenVK.a
