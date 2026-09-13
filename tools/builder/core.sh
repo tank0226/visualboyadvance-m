@@ -38,23 +38,41 @@ export CXX="\${CXX:-g++}"
 
 export CC_FOR_BUILD=gcc
 
-case "\$CC" in
-    ccache*)
-        :
-        ;;
-    *)
-        if command -v ccache >/dev/null; then
-            case "\$CMAKE_REQUIRED_ARGS" in
-                *ccache*)
-                    :
-                    ;;
-                *)
-                    CMAKE_REQUIRED_ARGS="\$CMAKE_REQUIRED_ARGS -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
-                    ;;
-            esac
-        fi
-        ;;
-esac
+# ccache goes into CC itself, from configure onwards, rather than onto the
+# make line.  It has to be there when configure runs: libtool records CC as
+# configure saw it and works out the language tag by matching the head of each
+# compile command against it, and a hand-written Makefile that calls libtool
+# without an explicit --tag -- libiconv's, for one -- then dies with "unable to
+# infer tagged configuration" the moment the compiler gains a prefix it has not
+# seen.  Automake emits --tag=CC itself and does not care, but plenty of dists
+# here are not automake.
+_ccache=\$(command -v ccache 2>/dev/null || :)
+
+if [ -n "\$_ccache" ]; then
+    case "\$CC" in
+        ccache\ *|*/ccache\ *)
+            :
+            ;;
+        *)
+            CC="\$_ccache \$CC"
+            CXX="\$_ccache \$CXX"
+            ;;
+    esac
+
+    # cmake cannot take a compiler with a prefix attached, so it gets ccache as
+    # a launcher instead and the bare path is unpicked from CC where the dist
+    # is configured.
+    case "\$CMAKE_REQUIRED_ARGS" in
+        *ccache*)
+            :
+            ;;
+        *)
+            CMAKE_REQUIRED_ARGS="\$CMAKE_REQUIRED_ARGS -DCMAKE_C_COMPILER_LAUNCHER=\$_ccache -DCMAKE_CXX_COMPILER_LAUNCHER=\$_ccache"
+            ;;
+    esac
+fi
+
+export CC CXX
 
 export CPPFLAGS="-isystem \$BUILD_ROOT/root/include $CPPFLAGS${CPPFLAGS:+ } -DCURL_STATICLIB -DGRAPHITE2_STATIC -DFLOAT_APPROX -Diconv=libiconv -Diconv_open=libiconv_open -Diconv_close=libiconv_close"
 export CFLAGS="$CFLAGS${CFLAGS:+ }-fPIC -L\$BUILD_ROOT/root/lib -pthread -lm -O3 -ffast-math -pipe -Wno-error=implicit-int"
@@ -651,27 +669,13 @@ setup_meson() {
     fi
 }
 
-# Just find the binary.  On the platforms that build ccache as a dist it only
-# appears once that dist is done, which is why this runs as ccache's
-# DIST_POST_BUILD hook as well as up front.
+# BUILD_ENV is what decides whether CC carries ccache, and on the platforms
+# that build ccache as a dist it is not on PATH when that first runs, so
+# re-evaluate once it is there.  Also runs as ccache's DIST_POST_BUILD hook.
 setup_ccache() {
-    CCACHE=$(command -v ccache 2>/dev/null || :)
-    export CCACHE
-}
+    command -v ccache >/dev/null || return 0
 
-# Prefix make's CC and CXX with ccache.  Recompiling a dist hits cache on
-# nearly everything -- 99% of the compiler calls a dist build makes are
-# cacheable -- but a configure run is the reverse: three quarters of what it
-# invokes the compiler for is link and preprocess probes that ccache cannot
-# cache at all, so wrapping configure only adds a process to each one.
-# Measured on tmux here, build went 4.67s -> 1.25s warm while configure went
-# 9.32s -> 10.24s warm and 12.43s cold.  So this goes to make, and configure
-# keeps a bare CC.  CMake dists get the same effect from the compiler launcher
-# set in BUILD_ENV, which likewise wraps the build and not the probes.
-ccache_make_args() {
-    [ -n "$CCACHE" ] || return 0
-
-    puts "CC=\"$CCACHE $CC\" CXX=\"$CCACHE $CXX\""
+    set_build_env
 }
 
 setup_ninja() {
@@ -1661,23 +1665,12 @@ EOF
                 eval "set -- $extra_dist_args"
                 echo_eval_run "$configure_override $@"
             else
-                # Meson bakes the compiler into build.ninja at setup time, and
-                # when CC is set it takes it verbatim -- it only prepends ccache
-                # on a compiler it discovered itself -- so the prefix has to go
-                # on here rather than on the ninja run.  Meson probes little
-                # enough that this costs nothing measurable: setup ran 1.83s
-                # bare and 1.80s wrapped, while the build it generates went
-                # 3.12s to 1.01s on a rebuild.
-                saved_CC=$CC
-                saved_CXX=$CXX
-                export CC="${CCACHE:+$CCACHE }$CC"
-                export CXX="${CCACHE:+$CCACHE }$CXX"
-
+                # Meson takes CC verbatim when it is set -- it only prepends
+                # ccache to a compiler it found itself -- so it picks up the
+                # one BUILD_ENV already put there and bakes it into
+                # build.ninja.  Nothing to do here.
                 eval "set -- $(dist_args "$current_dist" meson) $extra_dist_args"
                 echo_run $MESON .. "$@"
-
-                export CC="$saved_CC"
-                export CXX="$saved_CXX"
             fi
             dist_post_configure "$current_dist"
             run_ninja
@@ -1801,7 +1794,7 @@ EOF
             fi
 
             dist_post_configure "$current_dist"
-            eval "set -- $(ccache_make_args) $(dist_make_args "$current_dist")"
+            eval "set -- $(dist_make_args "$current_dist")"
             echo_run $MAKE -j$NUM_CPUS "$@"
 
             if ! dist_flags "$current_dist" no_install; then
@@ -1831,8 +1824,13 @@ EOF
                 eval "set -- $extra_dist_args"
                 echo_eval_run "$configure_override $@"
             else
+                # cmake wants CMAKE_C_COMPILER to be nothing but a path, so
+                # drop the ccache BUILD_ENV put in front of it -- cmake gets
+                # ccache as a compiler launcher instead, from
+                # CMAKE_REQUIRED_ARGS.
                 saved_CC=$CC
                 set -- $CC
+                [ "${1##*/}" = ccache ] && shift
                 export CC=$1
                 shift
                 saved_CFLAGS=$CFLAGS
@@ -1840,6 +1838,7 @@ EOF
 
                 saved_CXX=$CXX
                 set -- $CXX
+                [ "${1##*/}" = ccache ] && shift
                 export CXX=$1
                 shift
                 saved_CXXFLAGS=$CXXFLAGS
@@ -1930,7 +1929,7 @@ EOF
                 makefile=Makefile
             fi
 
-            eval "set -- $DIST_BARE_MAKE_ARGS $(ccache_make_args) $(dist_make_args "$current_dist")"
+            eval "set -- $DIST_BARE_MAKE_ARGS $(dist_make_args "$current_dist")"
 
             echo_run $MAKE -j$NUM_CPUS "$@"
 
@@ -2828,7 +2827,7 @@ build_lua() {
         _lua_ar="$target_platform-ar" _lua_ranlib="$target_platform-ranlib"
     fi
 
-    echo_run $MAKE -j$NUM_CPUS -C src a CC="${CCACHE:+$CCACHE }$CC" AR="$_lua_ar rcu" RANLIB="$_lua_ranlib" \
+    echo_run $MAKE -j$NUM_CPUS -C src a CC="$CC" AR="$_lua_ar rcu" RANLIB="$_lua_ranlib" \
              MYCFLAGS="$CPPFLAGS $CFLAGS $_lua_defines"
 
     echo_run cp -f src/liblua.a "$BUILD_ROOT/root/lib"
